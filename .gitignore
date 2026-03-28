@@ -1,0 +1,6 @@
+# Caché de Python
+__pycache__/
+*.pyc
+
+# Configuración de PyCharm
+.idea/
