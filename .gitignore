@@ -4,3 +4,7 @@ __pycache__/
 
 # Configuración de PyCharm
 .idea/
+
+# Virtual environments
+venv/
+.env
