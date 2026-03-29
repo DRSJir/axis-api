@@ -3,9 +3,12 @@ from flask_cors import CORS
 
 from app.database import db, configure_database
 from app.models import Product
+from app.routes import api_bp
 
 app = Flask(__name__)
 CORS(app)
+configure_database(app)
+app.register_blueprint(api_bp, url_prefix='/api')
 
 def seed_database():
     with app.app_context():
@@ -19,19 +22,6 @@ def seed_database():
             db.session.commit()
             print("Base de datos lista")
 
-@app.route('/')
-def hello_world():
-    return {"mensaje": "Hola mundo!"}
-
-@app.route('/api/status', methods=["GET"])
-def check_status():
-    return jsonify({
-        "status": "online",
-        "project": "AXIS Precision Tools API",
-        "verison": "1.0"
-    }), 200
-
-configure_database(app)
 seed_database()
 
 if __name__ == '__main__':
