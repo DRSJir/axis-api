@@ -58,7 +58,7 @@ class InventoryService:
 
     @staticmethod
     def get_product_by_id(id):
-        product = Product.get(id)
+        product = Product.query.get(id)
         return product.to_dict() if product else None
 
     @staticmethod
