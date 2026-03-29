@@ -1,17 +1,22 @@
-from flask import Blueprint, jsonify, request, abort
-from .database import db
-from .models import Product
+from flask import Blueprint, jsonify, request
+from .services import InventoryService
+from .validators import validate_schema, admin_required
 
 # Crear un blueprint
 api_bp = Blueprint('api', __name__)
 
-# Simular usuarios
-ADMIN_API_KEY = "axis_secret_2026"
 
+@api_bp.route("/checkout", methods=['POST'])
+@validate_schema(['product_id', 'quantity'])
 def checkout():
-    key = request.headers.get('X-API-KEY')
-    if key != ADMIN_API_KEY:
-        abort(401, description="No autorizado: API Key inválida o ausente")
+    data = request.get_json()
+    result = InventoryService.process_purchase(
+        data['product_id'],
+        data['quantity']
+    )
+
+    status = result.pop('status')
+    return jsonify(result), status
 
 @api_bp.route('/status', methods=["GET"])
 def check_status():
@@ -23,39 +28,37 @@ def check_status():
 
 @api_bp.route('/products', methods=['GET'])
 def get_products():
-    products = Product.query.all()
-    return jsonify([p.to_dict() for p in products])
+    products = InventoryService.get_all_products()
+    return jsonify(products), 200
 
 @api_bp.route("/product/<int:id>", methods=['GET'])
 def get_product(id):
-    produc = Product.query.get_or_404(id)
-    return jsonify(produc.to_dict()), 200
+    product = InventoryService.get_product_by_id(id)
+    return jsonify(product), 200
 
 @api_bp.route("/products", methods=['POST'])
+@admin_required
+@validate_schema(['name', 'price', 'sku', 'stock'])
 def add_product():
-    checkout()
     data = request.get_json()
+    product = InventoryService.create_product(data)
 
-    new_product = Product(
-        name = data["name"],
-        price = data["price"],
-        stock = data["stock"],
-        material = data.get("material"),
-        sku = data["sku"]
-    )
-    db.session.add(new_product)
-    db.session.commit()
+    if not product:
+        return jsonify({"error": "no se pudo crear el producto"}), 400
 
-    return jsonify(new_product.to_dict()), 201
+    return jsonify(product), 201
 
 @api_bp.route("/products/<int:id>", methods=["PUT"])
+@admin_required
 def update_stock(id):
-    checkout()
-    product = Product.query.get_or_404(id)
     data = request.get_json()
 
-    if 'stock'in data:
-        product.stock = data["stock"]
+    if not data or 'stock' not in data:
+        return jsonify({"error": "falta campo stock"}), 400
 
-    db.session.commit()
-    return jsonify(product.to_dict()), 201
+    product = InventoryService.update_product_stock(id, data['stock'])
+
+    if not product:
+        return jsonify({"error": "producto no encontrado"})
+
+    return jsonify(product), 200
