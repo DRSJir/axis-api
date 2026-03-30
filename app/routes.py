@@ -28,17 +28,23 @@ def check_status():
 
 @api_bp.route('/products', methods=['GET'])
 def get_products():
+    # Parámetros de paginación
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 8, type=int)
+
     # Obtener los filtros de la URL: ?category=X&device=Y
     category = request.args.get('category')
     model = request.args.get('model')
-    search = request.args.get('q')
+    query = request.args.get('q')
 
-    products = InventoryService.get_filtered_catalog(
+    result = InventoryService.get_paginated_catalog(
+        page=page,
+        per_page=per_page,
         category_name=category,
         model_name=model,
-        search_query=search
+        search_query=query
     )
-    return jsonify(products), 200
+    return jsonify(result), 200
 
 @api_bp.route("/product/<int:id>", methods=['GET'])
 def get_product(id):

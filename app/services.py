@@ -1,7 +1,3 @@
-from itertools import product
-
-from unicodedata import category
-
 from app.database import db
 from app.models import Product, Category, Device
 
@@ -119,3 +115,33 @@ class InventoryService:
 
         products = query.all()
         return [product.to_dict() for product in products]
+
+    @staticmethod
+    def get_paginated_catalog(category_name=None, model_name=None, search_query=None, page=1, per_page=10):
+        query = Product.query
+
+        # Filtro por categoría
+        if category_name:
+            query = query.join(Category).filter(Category.name == category_name)
+
+        # Filtro por modelo de dispositivo
+        if model_name:
+            query = query.join(Product.compatible_devices).filter(Device.model_name == model_name)
+
+        # Búsqueda por nombre
+        if search_query:
+            query = query.filter(Product.name.ilike(f"{search_query}%"))
+
+        # Paginación
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        return {
+            "items": [p.to_dict() for p in pagination.items],
+            "total": pagination.total,
+            "pages": pagination.pages,
+            "current_page": pagination.page,
+            "next_page": pagination.next_num,
+            "prev_page": pagination.prev_num,
+            "has_next": pagination.has_next,
+            "has_prev": pagination.has_prev
+        }
