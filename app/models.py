@@ -66,25 +66,3 @@ class CartItem(db.Model):
             "quantity": self.quantity,
             "subtotal": round(self.product.price * self.quantity, 2)
         }
-
-
-class CartService:
-    TAX_RATE = 0.16
-    SHIPPING_FEE = 0.15
-
-    @staticmethod
-    def get_cart_summary():
-        items = CartItem.query.all()
-        subtotal = sum((item.product.price * item.quantity) for item in items)
-        tax = subtotal * CartService.TAX_RATE
-        total = subtotal + tax + (CartService.SHIPPING_FEE if subtotal > 0 else 0)
-
-        return {
-            "items": [item.to_dict() for item in items],
-            "calculation": {
-                "subtotal": round(subtotal, 2),
-                "tax": round(tax, 2),
-                "shipping": CartService.SHIPPING_FEE if total > 0 else 0,
-                "total": round(total, 2)
-            }
-        }

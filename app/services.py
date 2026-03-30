@@ -1,5 +1,5 @@
 from app.database import db
-from app.models import Product, Category, Device
+from app.models import Product, Category, Device, CartItem
 
 
 class InventoryService:
@@ -145,3 +145,109 @@ class InventoryService:
             "has_next": pagination.has_next,
             "has_prev": pagination.has_prev
         }
+
+
+class CartService:
+    TAX_RATE = 0.16
+    SHIPPING_FEE = 0.15
+
+    @staticmethod
+    def get_cart_summary():
+        items = CartItem.query.all()
+        subtotal = sum((item.product.price * item.quantity) for item in items)
+        tax = subtotal * CartService.TAX_RATE
+        total = subtotal + tax + (CartService.SHIPPING_FEE if subtotal > 0 else 0)
+
+        return {
+            "items": [item.to_dict() for item in items],
+            "calculation": {
+                "subtotal": round(subtotal, 2),
+                "tax": round(tax, 2),
+                "shipping": CartService.SHIPPING_FEE if total > 0 else 0,
+                "total": round(total, 2)
+            }
+        }
+
+    @staticmethod
+    def add_to_cart(product_id, quantity):
+        quantity = int(quantity)
+        product = Product.query.get(product_id)
+
+        # 1. Verificar si el producto existe
+        if not product:
+            return {
+                "error": "producto no encontrado",
+                "status": 404
+            }
+
+        # 2. Validación de Disponibilidad (Regla de Negocio)
+        if product.stock < quantity:
+            return {
+                "error": "disponibilidad insuficiente",
+                "requested": quantity,
+                "available": product.stock,
+                "status": 400
+            }
+
+        # 3. Verificar si ya está en el carrito para actualizar cantidad o crear nuevo
+        try:
+            item = CartItem.query.filter_by(product_id = product_id).first()
+            if item:
+                # Suma total no exede el total
+                if (item.quantity + quantity) > product.stock:
+                    return {
+                        "error": "disponibilidad insuficiente",
+                        "status": 400
+                    }
+                item.quantity += quantity
+
+            else:
+                item = CartItem(product_id=product_id, quantity=quantity)
+                db.session.add(item)
+
+            db.session.commit()
+            return {"message": "producto agregado con exito", "status": 200}
+
+        except Exception as e:
+            db.rollback()
+            return {"error": f"{e}", "status": 200}
+
+    @staticmethod
+    def complete_checkout():
+        # Obtener todos los elementos del carrito
+        cart_items = CartItem.query.all()
+
+        if not cart_items:
+            return {"error": "el carrito esta vacio", "status": 400}
+
+        try:
+            # Validar stock para cada producto
+            for item in cart_items:
+                if item.product.stock < item.quantity:
+                    return {
+                        "error": "stock insificiente",
+                        "available": item.quantity,
+                        "status": 409,
+                    }
+
+            # cuando todos tienen stock
+            summary = CartService.get_cart_summary()
+
+            for item in cart_items:
+                item.product.stock -= item.quantity
+                db.session.delete(item) # Limpiar el carrito
+
+            db.session.commit()
+
+            return {
+                "message": "orden procesada",
+                "recipt": summary['calculation'],
+                "status": 201
+            }
+
+        except Exception as e:
+            db.session.rollback()
+            return {
+                "error": f"error al procesar la compra {str(e)}",
+                "status": 500
+            }

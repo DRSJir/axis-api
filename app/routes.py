@@ -1,5 +1,9 @@
+from crypt import methods
+
 from flask import Blueprint, jsonify, request
-from .services import InventoryService
+from sqlalchemy import result_tuple
+
+from .services import InventoryService, CartService
 from .validators import validate_schema, admin_required
 
 # Crear un blueprint
@@ -75,3 +79,31 @@ def update_stock(id):
         return jsonify({"error": "producto no encontrado"})
 
     return jsonify(product), 200
+
+
+
+
+@api_bp.route("/cart", methods=['GET'])
+def summary():
+    # Resumen con subtotales e impuestos
+    summary = CartService.get_cart_summary()
+    return jsonify(summary), 200
+
+@api_bp.route("/cart", methods=['POST'])
+@validate_schema(['product_id', 'quantity'])
+def add_to_cart():
+    data = request.get_json()
+    result = CartService.add_to_cart(data['product_id'], data['quantity'])
+    status = result.pop('status', 200)
+    return jsonify(result), status
+
+@api_bp.route("/cart/checkout", methods=['POST'])
+def checkout_order():
+    # Validar token de pago stripe, paypal...
+    result = CartService.complete_checkout()
+
+    if result is None:
+        return jsonify({"error": "Error interno: el servicio no devolvió respuesta"}), 500
+
+    status = result.pop('status', 200)
+    return jsonify(result), status
