@@ -1,5 +1,9 @@
+from crypt import methods
+
 from flask import Blueprint, jsonify, request
-from .services import InventoryService
+from sqlalchemy import result_tuple
+
+from .services import InventoryService, CartService
 from .validators import validate_schema, admin_required
 
 # Crear un blueprint
@@ -28,17 +32,23 @@ def check_status():
 
 @api_bp.route('/products', methods=['GET'])
 def get_products():
+    # Parámetros de paginación
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 8, type=int)
+
     # Obtener los filtros de la URL: ?category=X&device=Y
     category = request.args.get('category')
     model = request.args.get('model')
-    search = request.args.get('q')
+    query = request.args.get('q')
 
-    products = InventoryService.get_filtered_catalog(
+    result = InventoryService.get_paginated_catalog(
+        page=page,
+        per_page=per_page,
         category_name=category,
         model_name=model,
-        search_query=search
+        search_query=query
     )
-    return jsonify(products), 200
+    return jsonify(result), 200
 
 @api_bp.route("/product/<int:id>", methods=['GET'])
 def get_product(id):
@@ -69,3 +79,31 @@ def update_stock(id):
         return jsonify({"error": "producto no encontrado"})
 
     return jsonify(product), 200
+
+
+
+
+@api_bp.route("/cart", methods=['GET'])
+def summary():
+    # Resumen con subtotales e impuestos
+    summary = CartService.get_cart_summary()
+    return jsonify(summary), 200
+
+@api_bp.route("/cart", methods=['POST'])
+@validate_schema(['product_id', 'quantity'])
+def add_to_cart():
+    data = request.get_json()
+    result = CartService.add_to_cart(data['product_id'], data['quantity'])
+    status = result.pop('status', 200)
+    return jsonify(result), status
+
+@api_bp.route("/cart/checkout", methods=['POST'])
+def checkout_order():
+    # Validar token de pago stripe, paypal...
+    result = CartService.complete_checkout()
+
+    if result is None:
+        return jsonify({"error": "Error interno: el servicio no devolvió respuesta"}), 500
+
+    status = result.pop('status', 200)
+    return jsonify(result), status

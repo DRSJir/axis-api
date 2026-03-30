@@ -1,7 +1,3 @@
-from sqlalchemy import true
-from sqlalchemy.orm import backref
-from sqlalchemy.testing.pickleable import Order
-
 from .database import db
 
 class Device(db.Model):
@@ -50,4 +46,23 @@ class Product(db.Model):
             "material": self.material,
             "sku": self.sku,
             "compatibility": [d.model_name for d in self.compatible_devices]
+        }
+
+
+class CartItem(db.Model):
+    __tablename__ = 'cart_item'
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    quantity = db.Column(db.Integer, default=1)
+
+    product = db.relationship('Product', backref='cart_items')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "product_id": self.product_id,
+            "name": self.product.name,
+            "price": self.product.price,
+            "quantity": self.quantity,
+            "subtotal": round(self.product.price * self.quantity, 2)
         }
