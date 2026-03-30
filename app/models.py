@@ -1,7 +1,3 @@
-from sqlalchemy import true
-from sqlalchemy.orm import backref
-from sqlalchemy.testing.pickleable import Order
-
 from .database import db
 
 class Device(db.Model):
@@ -50,4 +46,45 @@ class Product(db.Model):
             "material": self.material,
             "sku": self.sku,
             "compatibility": [d.model_name for d in self.compatible_devices]
+        }
+
+
+class CartItem(db.Model):
+    __tablename__ = 'cart_item'
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    quantity = db.Column(db.Integer, default=1)
+
+    product = db.relationship('Product', backref='cart_items')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "product_id": self.product_id,
+            "name": self.product.name,
+            "price": self.product.price,
+            "quantity": self.quantity,
+            "subtotal": round(self.product.price * self.quantity, 2)
+        }
+
+
+class CartService:
+    TAX_RATE = 0.16
+    SHIPPING_FEE = 0.15
+
+    @staticmethod
+    def get_cart_summary():
+        items = CartItem.query.all()
+        subtotal = sum((item.product.price * item.quantity) for item in items)
+        tax = subtotal * CartService.TAX_RATE
+        total = subtotal + tax + (CartService.SHIPPING_FEE if subtotal > 0 else 0)
+
+        return {
+            "items": [item.to_dict() for item in items],
+            "calculation": {
+                "subtotal": round(subtotal, 2),
+                "tax": round(tax, 2),
+                "shipping": CartService.SHIPPING_FEE if total > 0 else 0,
+                "total": round(total, 2)
+            }
         }
