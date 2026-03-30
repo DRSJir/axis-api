@@ -102,7 +102,7 @@ class InventoryService:
         return None
 
     @staticmethod
-    def get_filtered_catalog(category_name=None, model_name=None):
+    def get_filtered_catalog(category_name=None, model_name=None, search_query=None):
         query = Product.query
 
         # Filtro por categoría
@@ -112,6 +112,10 @@ class InventoryService:
         # Filtro por modelo de dispositivo
         if model_name:
             query = query.join(Product.compatible_devices).filter(Device.model_name == model_name)
+
+        # Busqueda por nombre
+        if search_query:
+            query = query.filter(Product.name.ilike(f"{search_query}%"))
 
         products = query.all()
         return [product.to_dict() for product in products]

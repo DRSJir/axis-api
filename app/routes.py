@@ -30,9 +30,14 @@ def check_status():
 def get_products():
     # Obtener los filtros de la URL: ?category=X&device=Y
     category = request.args.get('category')
-    device = request.args.get('device')
+    model = request.args.get('model')
+    search = request.args.get('q')
 
-    products = InventoryService.get_filtered_catalog(category, device)
+    products = InventoryService.get_filtered_catalog(
+        category_name=category,
+        model_name=model,
+        search_query=search
+    )
     return jsonify(products), 200
 
 @api_bp.route("/product/<int:id>", methods=['GET'])
