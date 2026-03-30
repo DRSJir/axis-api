@@ -28,7 +28,16 @@ def check_status():
 
 @api_bp.route('/products', methods=['GET'])
 def get_products():
-    products = InventoryService.get_all_products()
+    # Obtener los filtros de la URL: ?category=X&device=Y
+    category = request.args.get('category')
+    model = request.args.get('model')
+    search = request.args.get('q')
+
+    products = InventoryService.get_filtered_catalog(
+        category_name=category,
+        model_name=model,
+        search_query=search
+    )
     return jsonify(products), 200
 
 @api_bp.route("/product/<int:id>", methods=['GET'])
@@ -38,15 +47,13 @@ def get_product(id):
 
 @api_bp.route("/products", methods=['POST'])
 @admin_required
-@validate_schema(['name', 'price', 'sku', 'stock'])
+@validate_schema(['name', 'price', 'sku', 'stock', 'category'])
 def add_product():
     data = request.get_json()
-    product = InventoryService.create_product(data)
+    result = InventoryService.create_product(data)
 
-    if not product:
-        return jsonify({"error": "no se pudo crear el producto"}), 400
-
-    return jsonify(product), 201
+    status = result.pop('status', 400)
+    return jsonify(result), status
 
 @api_bp.route("/products/<int:id>", methods=["PUT"])
 @admin_required
