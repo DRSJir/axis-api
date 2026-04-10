@@ -1,3 +1,5 @@
+from idlelib import query
+
 from app.database import db
 from app.models import Product, Category, Device, CartItem
 
@@ -152,8 +154,14 @@ class CartService:
     SHIPPING_FEE = 0.15
 
     @staticmethod
-    def get_cart_summary():
+    def get_cart_summary(session_id, user_id=None):
+        query = CartItem.query.filter(
+            (CartItem.user_id == user_id) if user_id else (CartItem.session_id == session_id)
+        )
+
         items = CartItem.query.all()
+
+        # calculo de impuestos
         subtotal = sum((item.product.price * item.quantity) for item in items)
         tax = subtotal * CartService.TAX_RATE
         total = subtotal + tax + (CartService.SHIPPING_FEE if subtotal > 0 else 0)
@@ -169,85 +177,115 @@ class CartService:
         }
 
     @staticmethod
-    def add_to_cart(product_id, quantity):
-        quantity = int(quantity)
-        product = Product.query.get(product_id)
-
-        # 1. Verificar si el producto existe
-        if not product:
-            return {
-                "error": "producto no encontrado",
-                "status": 404
-            }
-
-        # 2. Validación de Disponibilidad (Regla de Negocio)
-        if product.stock < quantity:
-            return {
-                "error": "disponibilidad insuficiente",
-                "requested": quantity,
-                "available": product.stock,
-                "status": 400
-            }
-
-        # 3. Verificar si ya está en el carrito para actualizar cantidad o crear nuevo
+    def add_to_cart(product_id, quantity, session_id, user_id=None):
         try:
-            item = CartItem.query.filter_by(product_id = product_id).first()
+            quantity = int(quantity)
+            product = Product.query.get(product_id)
+
+            # validación de existencia
+            if not product:
+                return {"error": "Producto no encontrado", "status": 404}
+
+            # validación de disponibilidad inicial
+            if product.stock < quantity:
+                return {
+                    "error": "Disponibilidad insuficiente",
+                    "requested": quantity,
+                    "available": product.stock,
+                    "status": 400
+                }
+
+            # Buscar si el producto ya está en el carrito de ESTA sesión/usuario
+            item = CartItem.query.filter_by(
+                product_id=product_id,
+                session_id=session_id
+            ).first()
+
             if item:
-                # Suma total no exede el total
+                # validar que la suma no exceda el stock real
                 if (item.quantity + quantity) > product.stock:
                     return {
-                        "error": "disponibilidad insuficiente",
+                        "error": f"No puedes agregar más. Stock máximo: {product.stock}",
                         "status": 400
                     }
                 item.quantity += quantity
-
+                # si el usuario se logueó a mitad de sesión, actualizamos su user_id
+                if user_id:
+                    item.user_id = user_id
             else:
-                item = CartItem(product_id=product_id, quantity=quantity)
+                # crear nuevo registro vinculado a la sesión
+                item = CartItem(
+                    product_id=product_id,
+                    quantity=quantity,
+                    session_id=session_id,
+                    user_id=user_id
+                )
                 db.session.add(item)
 
             db.session.commit()
-            return {"message": "producto agregado con exito", "status": 200}
+            return {
+                "message": "Producto agregado con éxito",
+                "item": item.to_dict(),
+                "status": 200
+            }
 
         except Exception as e:
-            db.rollback()
-            return {"error": f"{e}", "status": 200}
+            db.session.rollback()  # Corregido: db.session.rollback
+            return {"error": f"Error interno: {str(e)}", "status": 500}
 
     @staticmethod
-    def complete_checkout():
-        # Obtener todos los elementos del carrito
-        cart_items = CartItem.query.all()
+    def complete_checkout(session_id, user_id=None):
+        # obtener solo los items de esta sesión
+        cart_items = CartItem.query.filter_by(session_id=session_id).all()
 
         if not cart_items:
-            return {"error": "el carrito esta vacio", "status": 400}
+            return {"error": "El carrito está vacío", "status": 400}
 
         try:
-            # Validar stock para cada producto
+            # validar stock final para cada item (Atomicidad)
             for item in cart_items:
                 if item.product.stock < item.quantity:
                     return {
-                        "error": "stock insificiente",
-                        "available": item.quantity,
+                        "error": f"Stock insuficiente para {item.product.name}",
+                        "available": item.product.stock,
                         "status": 409,
                     }
 
-            # cuando todos tienen stock
-            summary = CartService.get_cart_summary()
+            # obtener resumen para el historial y recibo
+            summary = CartService.get_cart_summary(session_id, user_id)
 
+            # crear el registro en el Historial de Órdenes (Fase 2+)
+            from app.models import Order  # Importación local para evitar ciclos
+            new_order = Order(
+                user_id=user_id,
+                total=summary['calculation']['total'],
+                # Guardamos un snapshot de los nombres y precios actuales
+                items_json=[{
+                    "name": item.product.name,
+                    "price": item.product.price,
+                    "quantity": item.quantity,
+                    "sku": item.product.sku
+                } for item in cart_items]
+            )
+            db.session.add(new_order)
+
+            # descontar stock y limpiar el carrito de esta sesión
             for item in cart_items:
                 item.product.stock -= item.quantity
-                db.session.delete(item) # Limpiar el carrito
+                db.session.delete(item)
 
             db.session.commit()
 
             return {
-                "message": "orden procesada",
-                "recipt": summary['calculation'],
+                "message": "Orden procesada con éxito",
+                "order_id": new_order.id,
+                "receipt": summary['calculation'],
                 "status": 201
             }
 
         except Exception as e:
             db.session.rollback()
             return {
-                "error": f"error al procesar la compra {str(e)}",
+                "error": f"Error al procesar la compra: {str(e)}",
                 "status": 500
             }

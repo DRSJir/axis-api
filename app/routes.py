@@ -81,19 +81,45 @@ def update_stock(id):
     return jsonify(product), 200
 
 
+@api_bp.route('/cart', methods=['GET'])
+def get_cart_summary():
+    # buscamos el ID en los Headers de la petición
+    session_id = request.headers.get('X-Session-ID')
 
+    # si no viene en el Header, podemos buscarlo en los parámetros de la URL como respaldo
+    if not session_id:
+        session_id = request.args.get('X-Session-ID')
 
-@api_bp.route("/cart", methods=['GET'])
-def summary():
-    # Resumen con subtotales e impuestos
-    summary = CartService.get_cart_summary()
+    if not session_id:
+        return jsonify({"error": "Se requiere X-Session-ID para ver el carrito"}), 400
+
+    # AHORA SÍ: Pasamos el session_id al servicio
+    summary = CartService.get_cart_summary(session_id)
     return jsonify(summary), 200
+
 
 @api_bp.route("/cart", methods=['POST'])
 @validate_schema(['product_id', 'quantity'])
 def add_to_cart():
     data = request.get_json()
-    result = CartService.add_to_cart(data['product_id'], data['quantity'])
+
+    # extraer el session_id del header
+    session_id = request.headers.get('X-Session-ID')
+
+    # validar que el session_id exista
+    if not session_id:
+        return jsonify({"error": "Falta el header X-Session-ID"}), 400
+
+    # pasar el session_id a la función del servicio
+    user_id = getattr(request, 'user_id', None)
+
+    result = CartService.add_to_cart(
+        product_id=data['product_id'],
+        quantity=data['quantity'],
+        session_id=session_id,
+        user_id=user_id
+    )
+
     status = result.pop('status', 200)
     return jsonify(result), status
 

@@ -1,4 +1,6 @@
+import uuid
 from .database import db
+from datetime import datetime
 
 class Device(db.Model):
     __tablename__ = 'device'
@@ -52,10 +54,12 @@ class Product(db.Model):
 class CartItem(db.Model):
     __tablename__ = 'cart_item'
     id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(36), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     quantity = db.Column(db.Integer, default=1)
 
-    product = db.relationship('Product', backref='cart_items')
+    product = db.relationship('Product')
 
     def to_dict(self):
         return {
@@ -66,3 +70,17 @@ class CartItem(db.Model):
             "quantity": self.quantity,
             "subtotal": round(self.product.price * self.quantity, 2)
         }
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128))  # Para la Fase de Auth
+    orders = db.relationship('Order', backref='user', lazy=True)
+
+class Order(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    total = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Guardamos los items como un snapshot (por si el precio del producto cambia después)
+    items_json = db.Column(db.JSON, nullable=False)
