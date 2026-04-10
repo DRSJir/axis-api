@@ -8,3 +8,6 @@ __pycache__/
 # Virtual environments
 venv/
 .env
+
+# Base de datos
+*.db
