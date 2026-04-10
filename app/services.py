@@ -1,5 +1,3 @@
-from idlelib import query
-
 from app.database import db
 from app.models import Product, Category, Device, CartItem
 
