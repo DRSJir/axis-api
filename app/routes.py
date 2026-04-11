@@ -84,11 +84,11 @@ def update_stock(id):
 @api_bp.route('/cart', methods=['GET'])
 def get_cart_summary():
     # buscamos el ID en los Headers de la petición
-    session_id = request.headers.get('X-Session-ID')
+    session_id = request.headers.get('X-Session-ID') or request.args.get('X-Session-ID')
 
     # si no viene en el Header, podemos buscarlo en los parámetros de la URL como respaldo
     if not session_id:
-        session_id = request.args.get('X-Session-ID')
+        return jsonify({"error": "No se detectó X-Session-ID en Headers ni en Query Params"}), 400
 
     if not session_id:
         return jsonify({"error": "Se requiere X-Session-ID para ver el carrito"}), 400
