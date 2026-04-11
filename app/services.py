@@ -153,24 +153,34 @@ class CartService:
 
     @staticmethod
     def get_cart_summary(session_id, user_id=None):
+        # si el ID está vacío, no consultamos la DB
+        if not session_id or str(session_id).strip() == "" or session_id == "undefined":
+            return {
+                "items": [],
+                "calculation": {
+                    "subtotal": 0,
+                    "tax": 0,
+                    "shipping": 0,
+                    "total": 0
+                }
+            }
+
+        # si el ID es válido, procedemos con la consulta normal
         query = CartItem.query.filter(
             (CartItem.user_id == user_id) if user_id else (CartItem.session_id == session_id)
         )
+        items = query.all()
 
-        items = CartItem.query.all()
-
-        # calculo de impuestos
-        subtotal = sum((item.product.price * item.quantity) for item in items)
-        tax = subtotal * CartService.TAX_RATE
-        total = subtotal + tax + (CartService.SHIPPING_FEE if subtotal > 0 else 0)
+        subtotal = sum(item.product.price * item.quantity for item in items)
+        tax = round(subtotal * CartService.TAX_RATE, 2)
 
         return {
             "items": [item.to_dict() for item in items],
             "calculation": {
                 "subtotal": round(subtotal, 2),
-                "tax": round(tax, 2),
-                "shipping": CartService.SHIPPING_FEE if total > 0 else 0,
-                "total": round(total, 2)
+                "tax": tax,
+                "shipping": CartService.SHIPPING_FEE,
+                "total": round(subtotal + tax + CartService.SHIPPING_FEE, 2)
             }
         }
 
